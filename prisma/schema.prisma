@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  HOST
+  GUEST
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime  @default(now())
+  spaces       Space[]
+  bookings     Booking[]
+}
+
+model Space {
+  id          String    @id @default(cuid())
+  hostId      String
+  host        User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  location    String
+  pricePerNight Decimal @db.Decimal(10, 2)
+  wifi        Boolean   @default(false)
+  meetingRoom Boolean   @default(false)
+  entirePlace Boolean   @default(false)
+  photos      Photo[]
+  bookings    Booking[]
+  blocks      AvailabilityBlock[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  @@index([location])
+  @@index([hostId])
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  url       String
+  spaceId   String
+  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Booking {
+  id        String        @id @default(cuid())
+  spaceId   String
+  guestId   String
+  space     Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  guest     User          @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  startDate DateTime      @db.Date
+  endDate   DateTime      @db.Date
+  total     Decimal       @db.Decimal(10, 2)
+  status    BookingStatus @default(CONFIRMED)
+  createdAt DateTime      @default(now())
+  @@index([spaceId, startDate, endDate])
+  @@index([guestId, createdAt])
+}
+
+model AvailabilityBlock {
+  id        String   @id @default(cuid())
+  spaceId   String
+  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  reason    String?
+  createdAt DateTime @default(now())
+  @@index([spaceId, startDate, endDate])
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827"><title>SpaceHub — encontre seu espaço</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark">S</span> space<span>hub</span></a>
+  <nav><button class="nav-link" id="myBookingsBtn">Minhas reservas</button><button class="nav-link" id="hostBtn">Painel do anfitrião</button><button class="btn btn-outline" id="authBtn">Entrar</button></nav>
+</header>
+<main>
+  <section class="hero">
+    <div class="hero-copy"><span class="eyebrow">ESPAÇOS QUE MOVEM IDEIAS</span><h1>Seu próximo espaço<br><em>começa aqui.</em></h1><p>Encontre apartamentos, salas e espaços de trabalho com disponibilidade confiável.</p></div>
+    <div class="search-panel">
+      <label>Onde você procura?<input id="searchLocation" placeholder="Cidade, bairro ou endereço"></label>
+      <div class="date-fields"><label>Check-in<input type="date" id="startDate"></label><label>Check-out<input type="date" id="endDate"></label></div>
+      <button class="btn btn-primary full" id="searchBtn">Buscar espaços <span>→</span></button>
+    </div>
+  </section>
+  <section class="filters">
+    <div><span class="eyebrow">EXPLORE</span><h2>Espaços disponíveis</h2></div>
+    <div class="filter-options"><label><input type="checkbox" id="wifi"> Wi-Fi</label><label><input type="checkbox" id="meetingRoom"> Sala de reunião</label><label><input type="checkbox" id="entirePlace"> Espaço inteiro</label></div>
+  </section>
+  <div id="notice" class="notice" role="status"></div>
+  <section id="spacesGrid" class="spaces-grid"><div class="empty">Carregando espaços...</div></section>
+</main>
+<footer>© 2026 SpaceHub · Gestão inteligente de espaços</footer>
+<div class="modal hidden" id="modal"><div class="modal-card"><button class="close" id="closeModal">×</button><div id="modalContent"></div></div></div>
+<script src="/app.js"></script>
+</body></html>
