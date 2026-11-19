@@ -314,6 +314,78 @@ function createSpaceForm() {
 }
 window.deleteSpace = async id => { if (!confirm("Excluir este anúncio?")) return; try { await api("/spaces/"+id,{method:"DELETE"}); $("hostBtn").click(); loadSpaces(); } catch(err) { message(err.message,true); } };
 
+window.hostPanel = async () => {
+  if (!token || !currentUser) {
+    authModal();
+    return;
+  }
+
+  if (currentUser.role !== "HOST") {
+    message("Esta área é exclusiva para anfitriões.", true);
+    return;
+  }
+
+  try {
+    const result = await api("/spaces/mine");
+    const spaces = Array.isArray(result) ? result : (result.spaces || []);
+
+    const cards = spaces.map(space => {
+      const photo = space.photos?.[0]?.url;
+      const price = Number(space.pricePerNight).toFixed(2).replace(".", ",");
+
+      return `
+        <article style="border:1px solid #ddd; border-radius:12px; padding:16px; margin:12px 0;">
+          ${photo ? `
+            <img
+              src="${window.escapeHtml(photo)}"
+              alt="${window.escapeHtml(space.title)}"
+              style="width:100%; max-height:180px; object-fit:cover; border-radius:8px;"
+            >
+          ` : ""}
+
+          <h3>${window.escapeHtml(space.title)}</h3>
+          <p>${window.escapeHtml(space.location)}</p>
+          <p>R$ ${price} por noite</p>
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-primary"
+              data-action="manage-calendar"
+              data-space-id="${window.escapeHtml(space.id)}">
+              Gerenciar calendário
+            </button>
+
+            <button class="btn btn-outline"
+              data-action="delete-space"
+              data-space-id="${window.escapeHtml(space.id)}">
+              Excluir anúncio
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    openModal(`
+      <h2>Painel do anfitrião</h2>
+      <p>Gerencie seus espaços e calendários.</p>
+
+      <button class="btn btn-primary" id="newSpaceBtn">
+        + Cadastrar novo espaço
+      </button>
+
+      <div style="margin-top:20px;">
+        <h3>Meus espaços (${spaces.length})</h3>
+
+        ${cards || "<p>Você ainda não cadastrou nenhum espaço.</p>"}
+      </div>
+    `);
+
+    $("newSpaceBtn").onclick = createSpaceForm;
+
+  } catch (err) {
+    message(err.message, true);
+  }
+};
+
 window.calendarState = null;
 
 window.manageCalendar = async (spaceId) => {
@@ -566,6 +638,9 @@ if (action === "guest-calendar-next") {
   window.changeGuestCalendarMonth(1);
 }
 });
+
+$("hostBtn").onclick = window.hostPanel;
+
 if (currentUser) $("authBtn").textContent="Sair";
 const today = new Date().toISOString().slice(0,10); $("startDate").min=today; $("endDate").min=today;
 $("startDate").onchange=()=>{$("endDate").min=$("startDate").value;};
