@@ -49,6 +49,17 @@ function queryString() {
   ["wifi","meetingRoom","entirePlace"].forEach(k => { if ($(k).checked) p.set(k,"true"); });
   return p.toString();
 }
+
+window.escapeHtml = function(s = "") {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[c]));
+};
+
 async function loadSpaces() {
   $("spacesGrid").innerHTML = `<div class="empty">Buscando espaços...</div>`;
   try {
@@ -66,52 +77,229 @@ async function loadSpaces() {
     }).join("");
   } catch(err) { $("spacesGrid").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`; }
 }
-function escapeHtml(s="") { return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+
+
+
+window.guestCalendarState = null;
+
+window.renderGuestCalendar = () => {
+  const state = window.guestCalendarState;
+  if (!state) return;
+
+  const { month, year, bookings, blocks } = state;
+
+  const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  let html = "";
+
+  for (let i = 0; i < 42; i++) {
+    const day = i - firstDay + 1;
+
+    if (day < 1 || day > daysInMonth) {
+      html += `<div></div>`;
+      continue;
+    }
+
+    const date = new Date(Date.UTC(year, month, day))
+      .toISOString().slice(0, 10);
+
+    const reserved = bookings.some(b =>
+      date >= b.startDate.slice(0, 10) &&
+      date < b.endDate.slice(0, 10)
+    );
+
+    const blocked = blocks.some(b =>
+      date >= b.startDate.slice(0, 10) &&
+      date < b.endDate.slice(0, 10)
+    );
+
+    const background = reserved
+      ? "#fee2e2"
+      : blocked
+        ? "#fef3c7"
+        : "#dcfce7";
+
+    html += `
+      <div title="${reserved ? "Reservado" : blocked ? "Bloqueado" : "Disponível"}"
+        style="background:${background};padding:10px 2px;
+        border-radius:8px;text-align:center;font-size:13px;
+        min-height:40px">
+        <strong>${day}</strong>
+      </div>
+    `;
+  }
+
+  $("guestCalendarMonth").textContent =
+    new Date(year, month, 1).toLocaleDateString("pt-BR", {
+      month: "long",
+      year: "numeric"
+    });
+
+  $("guestCalendar").innerHTML = html;
+};
+
+window.changeGuestCalendarMonth = direction => {
+  const state = window.guestCalendarState;
+  if (!state) return;
+
+  state.month += direction;
+
+  if (state.month > 11) {
+    state.month = 0;
+    state.year++;
+  } else if (state.month < 0) {
+    state.month = 11;
+    state.year--;
+  }
+
+  window.renderGuestCalendar();
+};
+
 window.showSpace = async id => {
   try {
-    const s = await api("/spaces/"+id);
+    const [s, calendar] = await Promise.all([
+      api("/spaces/" + id),
+      api("/calendar/" + id)
+    ]);
+
+    window.guestCalendarState = {
+      bookings: calendar.bookings,
+      blocks: calendar.blocks,
+      month: new Date().getMonth(),
+      year: new Date().getFullYear()
+    };
+
     const photo = s.photos?.[0]?.url;
-    openModal(`<h2>${escapeHtml(s.title)}</h2>${photo?`<img src="${photo}" style="width:100%;height:190px;object-fit:cover;border-radius:12px">`:""}
-      <p class="muted">⌖ ${escapeHtml(s.location)} · Anfitrião: ${escapeHtml(s.host.name)}</p><p>${escapeHtml(s.description)}</p>
-      <div class="tags">${[s.wifi&&"Wi-Fi",s.meetingRoom&&"Sala de reunião",s.entirePlace&&"Espaço inteiro"].filter(Boolean).map(x=>`<span class="tag">${x}</span>`).join("")}</div>
-      <div class="booking-box"><strong>R$ ${Number(s.pricePerNight).toFixed(2).replace(".",",")} / noite</strong>
-      <form class="form" id="bookingForm"><div class="form-row"><label>Check-in<input name="startDate" type="date" required></label><label>Check-out<input name="endDate" type="date" required></label></div><button class="btn btn-primary">Solicitar reserva</button></form></div>`);
+
+    openModal(`
+      <h2>${escapeHtml(s.title)}</h2>
+
+      ${photo ? `
+        <img src="${photo}"
+          style="width:100%;height:190px;object-fit:cover;border-radius:12px">
+      ` : ""}
+
+      <p class="muted">
+        ⌖ ${escapeHtml(s.location)}
+        · Anfitrião: ${escapeHtml(s.host.name)}
+      </p>
+
+      <p>${escapeHtml(s.description)}</p>
+
+      <div class="tags">
+        ${[
+          s.wifi && "Wi-Fi",
+          s.meetingRoom && "Sala de reunião",
+          s.entirePlace && "Espaço inteiro"
+        ].filter(Boolean).map(x => `<span class="tag">${x}</span>`).join("")}
+      </div>
+
+      <div style="margin:22px 0">
+        <h3>Calendário de disponibilidade</h3>
+
+        <div style="display:flex;justify-content:space-between;
+          align-items:center;margin:15px 0">
+          <button class="btn btn-outline" data-action="guest-calendar-prev">‹</button>
+          <strong id="guestCalendarMonth"></strong>
+          <button class="btn btn-outline" data-action="guest-calendar-next">›</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);
+          gap:5px;text-align:center;margin-bottom:8px">
+          ${["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"]
+            .map(d => `<strong style="font-size:12px">${d}</strong>`).join("")}
+        </div>
+
+        <div id="guestCalendar"
+          style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">
+        </div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;
+          font-size:12px;margin-top:14px">
+          <span>🟢 Disponível</span>
+          <span>🔴 Reservado</span>
+          <span>🟡 Bloqueado</span>
+        </div>
+      </div>
+
+      <div class="booking-box">
+        <strong>
+          R$ ${Number(s.pricePerNight).toFixed(2).replace(".",",")} / noite
+        </strong>
+
+        <form class="form" id="bookingForm">
+          <div class="form-row">
+            <label>
+              Check-in
+              <input name="startDate" type="date" required>
+            </label>
+
+            <label>
+              Check-out
+              <input name="endDate" type="date" required>
+            </label>
+          </div>
+
+          <button class="btn btn-primary">Solicitar reserva</button>
+        </form>
+      </div>
+    `);
+
+    window.renderGuestCalendar();
+
     $("bookingForm").onsubmit = async e => {
       e.preventDefault();
+
       if (!currentUser) return authModal();
-      if (currentUser.role !== "GUEST") return message("Entre com uma conta de hóspede para reservar.", true);
+
+      if (currentUser.role !== "GUEST") {
+        return message("Entre com uma conta de hóspede para reservar.", true);
+      }
+
       const dates = Object.fromEntries(new FormData(e.target));
+
+      if (!dates.startDate || !dates.endDate ||
+          dates.startDate >= dates.endDate) {
+        return message("Informe um período válido.", true);
+      }
+
+      const state = window.guestCalendarState;
+
+      const conflict = [...state.bookings, ...state.blocks].some(item =>
+        dates.startDate < item.endDate.slice(0, 10) &&
+        dates.endDate > item.startDate.slice(0, 10)
+      );
+
+      if (conflict) {
+        return message(
+          "Este período contém datas reservadas ou bloqueadas. Escolha outras datas.",
+          true
+        );
+      }
+
       try {
-        const booking = await api("/bookings", {method:"POST",body:JSON.stringify({spaceId:id,...dates})});
+        const booking = await api("/bookings", {
+          method: "POST",
+          body: JSON.stringify({ spaceId: id, ...dates })
+        });
 
-closeModal();
+        closeModal();
 
-message(`Reserva confirmada! Total: R$ ${Number(booking.total).toFixed(2).replace(".",",")}.`);
+        message(
+          `Reserva confirmada! Total: R$ ${Number(booking.total).toFixed(2).replace(".",",")}.`
+        );
 
-loadSpaces();
-      } catch(err) { message(err.message,true); }
+        loadSpaces();
+      } catch (err) {
+        message(err.message, true);
+      }
     };
-  } catch(err) { message(err.message,true); }
-};
-$("searchBtn").onclick = loadSpaces;
-["wifi","meetingRoom","entirePlace"].forEach(k => $(k).onchange = loadSpaces);
-$("myBookingsBtn").onclick = async () => {
-  if (!currentUser) return authModal();
-  if (currentUser.role !== "GUEST") return message("Esta área é destinada a contas de hóspede.",true);
-  try {
-    const bookings = await api("/bookings/mine");
-    openModal(`<h2>Minhas reservas</h2>${bookings.length ? bookings.map(b=>`<div class="list-item"><strong>${escapeHtml(b.space.title)}</strong>${b.startDate.slice(0,10)} → ${b.endDate.slice(0,10)} · R$ ${Number(b.total).toFixed(2).replace(".",",")}<br><span class="muted">${b.status==="CONFIRMED"?"Confirmada":"Cancelada"}</span>${b.status==="CONFIRMED"?`<button class="btn btn-outline" style="float:right" data-action="cancel-booking" data-booking-id="${b.id}">Cancelar</button>`:""}</div>`).join("") : `<p class="muted">Você ainda não tem reservas.</p>`}`);
-  } catch(err) { message(err.message,true); }
-};
-window.cancelBooking = async id => { try { await api(`/bookings/${id}/cancel`,{method:"PATCH",body:"{}"}); $("myBookingsBtn").click(); message("Reserva cancelada."); } catch(err) { message(err.message,true); } };
-$("hostBtn").onclick = async () => {
-  if (!currentUser) return authModal();
-  if (currentUser.role !== "HOST") return message("Entre com uma conta de anfitrião para acessar o painel.",true);
-  try {
-    const spaces = await api("/spaces/mine");
-    openModal(`<h2>Painel do anfitrião</h2><button class="btn btn-primary" id="newSpaceBtn">+ Cadastrar espaço</button><div style="margin-top:16px">${spaces.map(s=>`<div class="list-item"><strong>${escapeHtml(s.title)}</strong>${escapeHtml(s.location)} · R$ ${Number(s.pricePerNight).toFixed(2)} / noite <button class="btn btn-outline" style="float:right" data-action="delete-space" data-space-id="${s.id}">Excluir</button></div>`).join("") || `<p class="muted">Você ainda não anunciou espaços.</p>`}</div>`);
-    $("newSpaceBtn").onclick = createSpaceForm;
-  } catch(err) { message(err.message,true); }
+
+  } catch (err) {
+    message(err.message, true);
+  }
 };
 function createSpaceForm() {
   openModal(`<h2>Novo espaço</h2><form class="form" id="spaceForm" enctype="multipart/form-data">
@@ -125,6 +313,213 @@ function createSpaceForm() {
   };
 }
 window.deleteSpace = async id => { if (!confirm("Excluir este anúncio?")) return; try { await api("/spaces/"+id,{method:"DELETE"}); $("hostBtn").click(); loadSpaces(); } catch(err) { message(err.message,true); } };
+
+window.calendarState = null;
+
+window.manageCalendar = async (spaceId) => {
+  try {
+    const data = await api(`/calendar/${spaceId}`);
+
+    window.calendarState = {
+      spaceId,
+      bookings: data.bookings,
+      blocks: data.blocks,
+      month: new Date().getMonth(),
+      year: new Date().getFullYear()
+    };
+
+    window.renderCalendar();
+  } catch (err) {
+    message(err.message, true);
+  }
+};
+
+window.renderCalendar = () => {
+  const state = window.calendarState;
+  if (!state) return;
+
+  const { month, year, bookings, blocks } = state;
+
+  const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  const dateString = (day) =>
+    new Date(Date.UTC(year, month, day)).toISOString().slice(0, 10);
+
+  const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  let daysHTML = "";
+
+  for (let i = 0; i < 42; i++) {
+    const day = i - firstDay + 1;
+
+    if (day < 1 || day > daysInMonth) {
+      daysHTML += `<div></div>`;
+      continue;
+    }
+
+    const date = dateString(day);
+
+    const reserved = bookings.some(b =>
+      date >= b.startDate.slice(0, 10) &&
+      date < b.endDate.slice(0, 10)
+    );
+
+    const blocked = blocks.some(b =>
+      date >= b.startDate.slice(0, 10) &&
+      date < b.endDate.slice(0, 10)
+    );
+
+    const status = reserved ? "Reservado" : blocked ? "Bloqueado" : "Disponível";
+
+    const background = reserved
+      ? "#fee2e2"
+      : blocked
+        ? "#fef3c7"
+        : "#dcfce7";
+
+    daysHTML += `
+      <div title="${status}: ${date}"
+        style="background:${background};padding:10px 2px;
+        border-radius:8px;text-align:center;font-size:13px;
+        min-height:42px">
+        <strong>${day}</strong>
+      </div>
+    `;
+  }
+
+  const monthName = new Date(year, month, 1)
+    .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+
+  openModal(`
+    <div class="calendar-view">
+      <h2>Gerenciar disponibilidade</h2>
+
+      <div style="display:flex;justify-content:space-between;
+        align-items:center;margin:20px 0">
+        <button class="btn btn-outline" data-action="calendar-prev">‹</button>
+        <strong>${monthName}</strong>
+        <button class="btn btn-outline" data-action="calendar-next">›</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);
+        gap:5px;text-align:center;margin-bottom:8px">
+        ${weekdays.map(d => `<strong style="font-size:12px">${d}</strong>`).join("")}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">
+        ${daysHTML}
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;
+        font-size:12px;margin:15px 0">
+        <span>🟢 Disponível</span>
+        <span>🔴 Reservado</span>
+        <span>🟡 Bloqueado</span>
+      </div>
+
+      <hr>
+
+      <h3>Bloquear datas</h3>
+      <p class="muted" style="font-size:13px">
+        A data final não é incluída no bloqueio, assim como no checkout.
+      </p>
+
+      <div class="form">
+        <label>Data inicial</label>
+        <input type="date" id="blockStart">
+
+        <label>Data final</label>
+        <input type="date" id="blockEnd">
+
+        <label>Motivo (opcional)</label>
+        <input type="text" id="blockReason" maxlength="180"
+          placeholder="Ex.: Manutenção">
+
+        <button class="btn btn-primary" data-action="create-calendar-block">
+          Bloquear período
+        </button>
+      </div>
+
+      <hr>
+
+      <h3>Bloqueios cadastrados</h3>
+
+      ${blocks.map(b => `
+        <div class="list-item">
+          <strong>
+            ${b.startDate.slice(0,10)} até ${b.endDate.slice(0,10)}
+          </strong>
+          ${escapeHtml(b.reason || "Sem motivo informado")}
+          <button class="btn btn-outline"
+            data-action="remove-calendar-block"
+            data-block-id="${b.id}">
+            Remover bloqueio
+          </button>
+        </div>
+      `).join("") || `<p class="muted">Nenhum bloqueio cadastrado.</p>`}
+    </div>
+  `);
+
+  modal.querySelector(".modal-card").style.width = "min(760px, 100%)";
+};
+
+window.changeCalendarMonth = (direction) => {
+  const state = window.calendarState;
+  if (!state) return;
+
+  state.month += direction;
+
+  if (state.month > 11) {
+    state.month = 0;
+    state.year++;
+  } else if (state.month < 0) {
+    state.month = 11;
+    state.year--;
+  }
+
+  window.renderCalendar();
+};
+
+window.createCalendarBlock = async () => {
+  const state = window.calendarState;
+  const startDate = $("blockStart").value;
+  const endDate = $("blockEnd").value;
+  const reason = $("blockReason").value.trim();
+
+  if (!startDate || !endDate || startDate >= endDate) {
+    return message("Informe um período válido.", true);
+  }
+
+  try {
+    await api(`/calendar/${state.spaceId}/blocks`, {
+      method: "POST",
+      body: JSON.stringify({ startDate, endDate, reason })
+    });
+
+    message("Período bloqueado com sucesso!");
+    await window.manageCalendar(state.spaceId);
+  } catch (err) {
+    message(err.message, true);
+  }
+};
+
+window.removeCalendarBlock = async (blockId) => {
+  const state = window.calendarState;
+
+  if (!confirm("Deseja realmente remover este bloqueio?")) return;
+
+  try {
+    await api(`/calendar/blocks/${blockId}`, {
+      method: "DELETE"
+    });
+
+    message("Bloqueio removido com sucesso!");
+    await window.manageCalendar(state.spaceId);
+  } catch (err) {
+    message(err.message, true);
+  }
+};
 document.addEventListener("click", event => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
@@ -142,6 +537,34 @@ document.addEventListener("click", event => {
   if (action === "delete-space") {
     window.deleteSpace(button.dataset.spaceId);
   }
+
+if (action === "manage-calendar") {
+  window.manageCalendar(button.dataset.spaceId);
+}
+
+if (action === "calendar-prev") {
+  window.changeCalendarMonth(-1);
+}
+
+if (action === "calendar-next") {
+  window.changeCalendarMonth(1);
+}
+
+if (action === "create-calendar-block") {
+  window.createCalendarBlock();
+}
+
+if (action === "remove-calendar-block") {
+  window.removeCalendarBlock(button.dataset.blockId);
+}
+
+if (action === "guest-calendar-prev") {
+  window.changeGuestCalendarMonth(-1);
+}
+
+if (action === "guest-calendar-next") {
+  window.changeGuestCalendarMonth(1);
+}
 });
 if (currentUser) $("authBtn").textContent="Sair";
 const today = new Date().toISOString().slice(0,10); $("startDate").min=today; $("endDate").min=today;
