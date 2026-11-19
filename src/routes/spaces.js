@@ -4,6 +4,7 @@ const prisma = require("../lib/prisma");
 const { auth, allow } = require("../middleware/auth");
 const upload = require("../middleware/upload");
 const { parseDate, validRange } = require("../utils/dates");
+const { normalizeLocation } = require("../utils/normalize");
 
 const spaceSchema = z.object({
   title: z.string().trim().min(3).max(120),
@@ -19,7 +20,8 @@ router.get("/", async (req, res, next) => {
   try {
     const { location, wifi, meetingRoom, entirePlace, startDate, endDate, minPrice, maxPrice } = req.query;
     const where = {
-      ...(location ? { location: { contains: String(location), mode: "insensitive" } } : {}),
+      ...(location ? { locationNormalized: {contains: normalizeLocation(location) }
+} : {}),
       ...(wifi === "true" ? { wifi: true } : {}),
       ...(meetingRoom === "true" ? { meetingRoom: true } : {}),
       ...(entirePlace === "true" ? { entirePlace: true } : {}),
@@ -72,9 +74,11 @@ router.post("/", auth, allow("HOST"), upload.array("photos", 8), async (req, res
     if (!req.files?.length) return res.status(400).json({ error: "Envie pelo menos uma foto do espaço." });
     const space = await prisma.space.create({
       data: {
-        ...data, hostId: req.user.id,
-        photos: { create: req.files.map(file => ({ url: `/uploads/${file.filename}` })) }
-      },
+  ...data,
+  locationNormalized: normalizeLocation(data.location),
+  hostId: req.user.id,
+  photos: { create: req.files.map(file => ({ url: `/uploads/${file.filename}` })) }
+},
       include: { photos: true }
     });
     res.status(201).json(space);
@@ -90,9 +94,14 @@ router.put("/:id", auth, allow("HOST"), upload.array("photos", 8), async (req, r
     const space = await prisma.space.update({
       where: { id: existing.id },
       data: {
-        ...data,
-        ...(req.files?.length ? { photos: { create: req.files.map(file => ({ url: `/uploads/${file.filename}` })) } } : {})
-      },
+  ...data,
+  ...(data.location ? {
+    locationNormalized: normalizeLocation(data.location)
+  } : {}),
+  ...(req.files?.length ? {
+    photos: { create: req.files.map(file => ({ url: `/uploads/${file.filename}` })) }
+  } : {})
+},
       include: { photos: true }
     });
     res.json(space);

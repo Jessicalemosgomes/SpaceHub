@@ -32,10 +32,11 @@ model Space {
   id          String    @id @default(cuid())
   hostId      String
   host        User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
-  title       String
-  description String
-  location    String
-  pricePerNight Decimal @db.Decimal(10, 2)
+  title              String
+  description        String
+  location           String
+  locationNormalized String   @default("")
+  pricePerNight      Decimal  @db.Decimal(10, 2)
   wifi        Boolean   @default(false)
   meetingRoom Boolean   @default(false)
   entirePlace Boolean   @default(false)
@@ -45,7 +46,8 @@ model Space {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   @@index([location])
-  @@index([hostId])
+  @@index([locationNormalized])
+  @@index([hostId]) 
 }
 
 model Photo {
