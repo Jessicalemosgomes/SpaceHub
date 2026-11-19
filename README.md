@@ -78,3 +78,5 @@ As imagens são armazenadas localmente em `uploads/` e servidas em `/uploads`. P
 ## Antes de produção
 
 Este repositório entrega uma base funcional/MVP. Antes de operar com clientes reais, configure HTTPS, segredo JWT forte, backup e monitoramento do PostgreSQL, política de privacidade, rate limits específicos para login, validação de arquivos por conteúdo, armazenamento externo de imagens, logs, testes automatizados e fluxo de confirmação/pagamento. O logout atual remove o token do navegador; para revogação imediata de tokens, implemente refresh tokens ou denylist.
+
+## Site online: https://spacehub-production-db0c4c6d.up.railway.app/
