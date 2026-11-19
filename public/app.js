@@ -83,8 +83,12 @@ window.showSpace = async id => {
       const dates = Object.fromEntries(new FormData(e.target));
       try {
         const booking = await api("/bookings", {method:"POST",body:JSON.stringify({spaceId:id,...dates})});
-        message(`Reserva confirmada! Total: R$ ${Number(booking.total).toFixed(2).replace(".",",")}.`);
-        closeModal(); loadSpaces();
+
+closeModal();
+
+message(`Reserva confirmada! Total: R$ ${Number(booking.total).toFixed(2).replace(".",",")}.`);
+
+loadSpaces();
       } catch(err) { message(err.message,true); }
     };
   } catch(err) { message(err.message,true); }
